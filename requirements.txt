@@ -4,3 +4,4 @@ gradio
 ollama
 streamlit
 langchain_community
+sentence-transformers
