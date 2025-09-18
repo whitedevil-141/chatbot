@@ -3,3 +3,4 @@ chromadb
 gradio
 ollama
 streamlit
+langchain_community
