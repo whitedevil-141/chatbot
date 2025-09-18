@@ -1,45 +1,74 @@
-from langchain.llms import HuggingFaceHub
 import os
 import streamlit as st
-from langchain.vectorstores import Chroma
-from langchain.embeddings import HuggingFaceEmbeddings
-from langchain.chains import RetrievalQA
+from dotenv import load_dotenv
+from langchain.llms import Ollama
+# --------------------------
+# Load environment variables
+# --------------------------
+load_dotenv()
+HF_TOKEN = os.getenv("HUGGINGFACEHUB_API_TOKEN")
+if not HF_TOKEN:
+    st.error("❌ Hugging Face API token not found. Add it in .env or Streamlit Secrets.")
+    st.stop()
 
-# Set Hugging Face API key (you can get one free at https://huggingface.co/settings/tokens)
-os.environ["HUGGINGFACEHUB_API_TOKEN"] = "HUGGINGFACEHUB_API_TOKEN"
+# --------------------------
+# Load company data
+# --------------------------
+def load_company_data(folder="data"):
+    texts = []
+    for file in os.listdir(folder):
+        if file.endswith(".txt"):
+            with open(os.path.join(folder, file), "r", encoding="utf-8") as f:
+                texts.append(f.read())
+    return "\n\n".join(texts)
 
+company_data = load_company_data()
+
+# --------------------------
+# Build strict prompt
+# --------------------------
+def build_prompt(question, context):
+    return f"""
+You are a company assistant. Answer the question ONLY using the information provided below.
+
+If the answer is not in the information, reply exactly: "Sorry, I don’t know."
+
+Information:
+{context}
+
+Question: {question}
+Answer:
+"""
+
+# --------------------------
+# Hugging Face Model Client
+# --------------------------
+llm = Ollama(model="mistral")
+
+def ask_company_bot(question):
+    prompt = build_prompt(question, company_data)
+    return llm(prompt)
+
+
+# --------------------------
 # Streamlit UI
-st.set_page_config(page_title="AI Business Chatbot", page_icon="🤖")
-st.title("🤖 Business AI Chatbot")
+# --------------------------
+st.set_page_config(page_title="Company AI Chatbot", page_icon="🤖")
+st.title("🤖 Company Knowledge Chatbot")
+st.write("Ask me anything about our company. I will only answer from the company data.")
 
-docs = [
-    "Brew&Bean is a coffee shop open from 8am to 8pm every day.",
-    "We serve coffee, tea, pastries, and sandwiches.",
-    "Customers can book tables online or via WhatsApp.",
-    "Refunds are available only for online pre-orders."
-]
-
-# Embeddings + Vector DB
-embedding = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-db = Chroma.from_texts(docs, embedding)
-
-# Hugging Face model (free small one)
-llm = HuggingFaceHub(repo_id="google/flan-t5-small")
-
-retriever = db.as_retriever()
-qa = RetrievalQA.from_chain_type(llm=llm, retriever=retriever, chain_type="stuff")
-
-# Chat history
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+# Show history
 for msg in st.session_state.messages:
     st.chat_message(msg["role"]).write(msg["content"])
 
-if prompt := st.chat_input("Type your question..."):
+# Chat box
+if prompt := st.chat_input("Ask a question..."):
     st.chat_message("user").write(prompt)
     st.session_state.messages.append({"role": "user", "content": prompt})
 
-    answer = qa.run(prompt)
+    answer = ask_company_bot(prompt)
     st.chat_message("assistant").write(answer)
     st.session_state.messages.append({"role": "assistant", "content": answer})
